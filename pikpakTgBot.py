@@ -9,7 +9,7 @@ import requests
 import telegram
 from telegram import Update
 from telegram.ext import Updater, CallbackContext, CommandHandler, Handler, MessageHandler, Filters
-
+from alist import AList
 from config import *
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -18,6 +18,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 SCHEMA = 'https' if ARIA2_HTTPS else 'http'
 PIKPAK_API_URL = "https://api-drive.mypikpak.com"
 PIKPAK_USER_URL = "https://user.mypikpak.com"
+PIKPAK_DEFAULT_SAVE_PATH = "My Pack"
 
 # 记录登陆账号的headers，调用api用
 pikpak_headers = [None] * len(USER)
@@ -34,7 +35,7 @@ else:
     updater = Updater(token=TOKEN, base_url=f"{TG_API_URL}/bot", base_file_url=f"{TG_API_URL}/file/bot")
 
 dispatcher = updater.dispatcher
-
+alist_manager = AList(ALIST_BASEURL, ALIST_TOKEN)
 
 # ptb官方提供的方法，进行权限限制
 # from functools import wraps
@@ -493,9 +494,6 @@ def main(update: Update, context: CallbackContext, magnet):
         # 如果找到了任务并且任务已完成，则开始从网盘下载到本地
         if mag_id and find and done:  # 判断mag_id是否为空防止所有号次数用尽的情况
             gid = {}  # 记录每个下载任务的gid，{gid:[文件名,file_id,下载直链]}
-            # 偶尔会出现aria2下载失败，报ssl i/o error错误，试试加上headers
-            download_headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:50.0) Gecko/20100101 Firefox/50.0'}
 
             down_name, down_url = get_download_url(file_id, each_account)
             # 获取到文件夹
@@ -503,19 +501,13 @@ def main(update: Update, context: CallbackContext, magnet):
                 logging.info(f"磁链{mag_url_simple}内容为文件夹:{down_name}，准备提取出每个文件并下载")
 
                 for name, url, down_file_id, path in get_folder_all_file(file_id, f"{down_name}/", each_account):
-                    jsonreq = json.dumps({'jsonrpc': '2.0', 'id': 'qwer', 'method': 'aria2.addUri',
-                                          'params': [f"token:{ARIA2_SECRET}", [url],
-                                                     {"dir": ARIA2_DOWNLOAD_PATH + '/' + path, "out": f"{name}",
-                                                      "header": download_headers}]})
-
-                    push_flag = False  # 成功推送aria2下载标志
+                    tid = None # 成功推送aria2下载标志
                     # 文件夹的推送下载是网络请求密集地之一，每个链接将尝试5次
                     for tries in range(5):
                         try:
-                            response = requests.post(f'{SCHEMA}://{ARIA2_HOST}:{ARIA2_PORT}/jsonrpc', data=jsonreq,
-                                                     timeout=5).json()
-                            push_flag = True
-                            break
+                            tid = alist_manager.copy(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path,ALIST_COPY_TO_PATH+"/"+path,[name])
+                            if tid is not None:
+                                break
                         except requests.exceptions.ReadTimeout:
                             logging.warning(f'{name}第{tries + 1}(/5)次推送下载超时，将重试！')
                             continue
@@ -523,128 +515,65 @@ def main(update: Update, context: CallbackContext, magnet):
                             logging.warning(f'{name}第{tries + 1}(/5)次推送下载出错，可能是frp故障，将重试！')
                             sleep(5)  # frp问题就休息一会
                             continue
-                    if not push_flag:  # 5次都推送下载失败，让用户手动下载该文件，并且要检查网络！
+                    if tid is None:  # 5次都推送下载失败，让用户手动下载该文件，并且要检查网络！
                         print_info = f'{name}推送aria2下载失败！该文件直链如下，请手动下载：\n{url}'
                         context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
                         logging.error(print_info)
                         continue  # 这个文件让用户手动下载，程序处理下一个文件
 
-                    gid[response['result']] = [f'{name}', down_file_id, url]
-                    # context.bot.send_message(chat_id=update.effective_chat.id, text=f'{name}推送aria2下载')  # 注释掉防止发送消息过多
-                    logging.info(f'{path}{name}推送aria2下载')
+                    gid[tid] = [f'{name}', down_file_id, url,tid]
+                    logging.info(f'{path}{name}推送alist下载')
 
                 # 文件夹所有文件都推送完后再发送信息，避免消息过多
                 context.bot.send_message(chat_id=update.effective_chat.id,
-                                         text=f'文件夹已推送aria2下载：\n{down_name}\n请耐心等待...')
-                logging.info(f'{down_name}文件夹下所有文件已推送aria2下载，请耐心等待...')
+                                         text=f'文件夹已推送alist下载：\n{down_name}\n请耐心等待...')
+                logging.info(f'{down_name}文件夹下所有文件已推送alist下载，请耐心等待...')
 
             # 否则是单个文件，只推送一次，不用太担心网络请求出错
             else:
-                logging.info(f'{mag_url_simple}内容为单文件，将直接推送aria2下载')
+                logging.info(f'{mag_url_simple}内容为单文件，将直接推送alist下载')
 
-                jsonreq = json.dumps({'jsonrpc': '2.0', 'id': 'qwer', 'method': 'aria2.addUri',
-                                      'params': [f"token:{ARIA2_SECRET}", [down_url],
-                                                 {"dir": ARIA2_DOWNLOAD_PATH, "out": down_name,
-                                                  "header": download_headers}]})
-                response = requests.post(f'{SCHEMA}://{ARIA2_HOST}:{ARIA2_PORT}/jsonrpc', data=jsonreq,
-                                         timeout=5).json()
-                gid[response['result']] = [down_name, file_id, down_url]
+                tid = alist_manager.copy(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH,ALIST_COPY_TO_PATH,[down_name])
+                gid[tid] = [down_name, file_id, down_url,tid]
                 context.bot.send_message(chat_id=update.effective_chat.id,
-                                         text=f'文件已推送aria2下载：\n{down_name}\n请耐心等待...')
-                logging.info(f'{down_name}已推送aria2下载，请耐心等待...')
+                                         text=f'文件已推送alist下载：\n{down_name}\n请耐心等待...')
+                logging.info(f'{down_name}已推送alist下载，请耐心等待...')
 
             logging.info(f'睡眠30s，之后将开始查询{down_name}下载进度...')
             # pikpak单文件限速6MB/s
-            sleep(30)
+            # sleep(30)
             # 查询每个gid是否完成
             download_done = False
-            complete_file_id = []  # 记录aria2下载成功的文件id
+            complete_file_id = []  # 记录alist下载成功的文件id
             failed_gid = {}  # 记录下载失败的gid
             while not download_done:
                 temp_gid = gid.copy()  # 下面的操作仅对temp_gid进行，别污染gid
-                for each_gid in gid.keys():
+                for tid in gid.keys():
                     # 这里是网络请求最密集的地方，一次查询失败跳过即可
-                    try:
-                        jsonreq = json.dumps({'jsonrpc': '2.0', 'id': 'qwer', 'method': 'aria2.tellStatus',
-                                              'params': [f"token:{ARIA2_SECRET}", each_gid,
-                                                         ["gid", "status", "errorMessage", "dir"]]})
-                        response = requests.post(f'{SCHEMA}://{ARIA2_HOST}:{ARIA2_PORT}/jsonrpc', data=jsonreq,
-                                                 timeout=5).json()
-                    except requests.exceptions.ReadTimeout:  # 超时就查询下一个gid，跳过一个无所谓的
-                        logging.warning(f'查询GID{each_gid}时网络请求超时，将跳过此次查询！')
-                        continue
-                    except json.JSONDecodeError:
-                        logging.warning(f'查询GID{each_gid}时返回结果错误，可能是frp故障，将跳过此次查询！')
-                        sleep(5)  # frp的问题就休息一会
-                        continue
-
                     try:  # 检查任务状态
-                        status = response['result']['status']
-                        if status == 'complete':  # 完成了删除对应的gid并记录成功下载
-                            temp_gid.pop(each_gid)  # 不再查询此gid
-                            complete_file_id.append(gid[each_gid][1])  # 将它记为已完成gid
-                        elif status == 'error':  # 如果aria2下载产生error
-                            error_message = response["result"]["errorMessage"]  # 识别错误信息
-                            # 如果是这两种错误信息，可尝试重新推送aria2下载来解决
-                            if error_message in ['No URI available.', 'SSL/TLS handshake failure: SSL I/O error']:
-                                # 再次推送aria2下载
-                                retry_down_name, retry_the_url = get_download_url(gid[each_gid][1], each_account)
-                                # 这只可能是文件，不会是文件夹
-                                jsonreq = json.dumps({'jsonrpc': '2.0', 'id': 'qwer', 'method': 'aria2.addUri',
-                                                      'params': [f"token:{ARIA2_SECRET}", [retry_the_url],
-                                                                 {"dir": response["result"]["dir"],
-                                                                  "out": retry_down_name,
-                                                                  "header": download_headers}]})
-                                # 当失败文件较多时，这里也是网络请求密集地
-                                repush_flag = False
-                                for tries in range(5):
-                                    try:
-                                        response = requests.post(f'{SCHEMA}://{ARIA2_HOST}:{ARIA2_PORT}/jsonrpc',
-                                                                 data=jsonreq, timeout=5).json()
-                                        repush_flag = True
-                                        break
-                                    except requests.exceptions.ReadTimeout:
-                                        logging.warning(
-                                            f'{retry_down_name}下载异常后重新推送第{tries + 1}(/5)次网络请求超时！将重试')
-                                        continue
-                                    except json.JSONDecodeError:
-                                        logging.warning(
-                                            f'{retry_down_name}下载异常后重新推送第{tries + 1}(/5)次返回结果错误，可能是frp故障！将重试！')
-                                        sleep(5)  # frp的问题就休息一会
-                                        continue
-                                if not repush_flag:  # ?次重新推送失败，则认为此文件下载失败，让用户手动下载
-                                    print_info = f'{retry_down_name}下载异常后重新推送失败！该文件下载直链如下，请手动下载：\n{retry_the_url}'
-                                    context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
-                                    logging.error(print_info)
-                                    failed_gid[each_gid] = temp_gid.pop(each_gid)  # 5次都不成功，别管这个任务了，放弃吧没救了
-                                    continue  # 程序将查询下一个gid
-
-                                # 重新记录gid
-                                temp_gid[response['result']] = [retry_down_name, gid[each_gid][1], retry_the_url]
-                                # 删除旧的gid
-                                temp_gid.pop(each_gid)
-                                # 消息提示
-                                logging.warning(
-                                    f'aria2下载{gid[each_gid][0]}出错！错误信息：{error_message}\t此文件已重新推送aria2下载！')
-                            # 其他错误信息暂未遇到，先跳过处理
-                            else:
-                                print_info = f'aria2下载{gid[each_gid][0]}出错！错误信息：{error_message}\t该文件下载直链如下，' \
-                                             f'请手动下载并反馈bug：\n{gid[each_gid][2]}'
-                                context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
-                                logging.warning(print_info)
-                                failed_gid[each_gid] = temp_gid.pop(each_gid)  # 认为该任务失败
+                        task = alist_manager.query_copy_task(tid)
+                        status = task.state
+                        if status == AList.StateSucceeded:  # 完成了删除对应的gid并记录成功下载
+                            temp_gid.pop(tid)  # 不再查询此gid
+                            complete_file_id.append(gid[tid][1])  # 将它记为已完成gid
+                        elif status == AList.StateErrored or status == AList.StateFailed or status == AList.StateFailing :  # 如果aria2下载产生error
+                            error_message = AList.get_state_description(status)+":"+task.error
+                            print_info = f'aria2下载{gid[tid][0]}出错！错误信息：{error_message}'
+                            context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
+                            logging.warning(print_info)
+                            failed_gid[tid] = temp_gid.pop(tid)  # 认为该任务失败
 
                     except KeyError:  # 此时任务可能已被手动删除
                         context.bot.send_message(chat_id=update.effective_chat.id,
-                                                 text=f'aria2下载{gid[each_gid][0]}任务被删除！')
-                        logging.warning(f'aria2下载{gid[each_gid][0]}任务被删除！')
-                        failed_gid[each_gid] = temp_gid.pop(each_gid)  # 认为该任务失败
+                                                 text=f'aria2下载{gid[tid][0]}任务被删除！')
+                        logging.warning(f'aria2下载{gid[tid][0]}任务被删除！')
+                        failed_gid[tid] = temp_gid.pop(tid)  # 认为该任务失败
 
                 # 判断完所有下载任务情况
                 gid = temp_gid
                 if len(gid) == 0:
                     download_done = True
-                    print_info = f'aria2下载已完成：\n{down_name}\n共{len(complete_file_id) + len(failed_gid)}个文件，' \
+                    print_info = f'alist下载已完成：\n{down_name}\n共{len(complete_file_id) + len(failed_gid)}个文件，' \
                                  f'其中{len(complete_file_id)}个成功，{len(failed_gid)}个失败'
                     # 输出下载失败的文件信息
                     if len(failed_gid):
@@ -653,6 +582,7 @@ def main(update: Update, context: CallbackContext, magnet):
                             print_info += values[0] + '\n'
 
                         # 存在失败文件则只释放成功文件的网盘空间
+                        complete_file_id += failed_gid
                         status_a = delete_files(complete_file_id, each_account)
                         if status_a:
                             logging.info(f'账号{each_account}已删除{down_name}中下载成功的网盘文件')
@@ -693,7 +623,7 @@ def main(update: Update, context: CallbackContext, magnet):
                         context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
                         logging.info(print_info)
                 else:
-                    logging.info(f'aria2下载{down_name}还未完成，睡眠20s后进行下一次查询...')
+                    logging.info(f'alist下载{down_name}还未完成，睡眠20s后进行下一次查询...')
                     sleep(20)
 
     except requests.exceptions.ReadTimeout:
@@ -1151,7 +1081,7 @@ def download(update: Update, context: CallbackContext):
 
 start_handler = CommandHandler(['start', 'help'], start)
 pikpak_handler = CommandHandler('p', pikpak)
-clean_handler = CommandHandler(['clean', 'clear'], clean)
+# clean_handler = CommandHandler(['clean', 'clear'], clean)
 account_handler = CommandHandler('account', account_manage)
 magnet_handler = MessageHandler(Filters.regex('^magnet:\?xt=urn:btih:[0-9a-fA-F]{40,}.*$'), pikpak)
 # download_handler = CommandHandler('download', download)  # download命令在pikpak命令健壮后将弃用
@@ -1162,7 +1092,7 @@ dispatcher.add_handler(account_handler)
 dispatcher.add_handler(start_handler)
 dispatcher.add_handler(magnet_handler)
 dispatcher.add_handler(pikpak_handler)
-dispatcher.add_handler(clean_handler)
+# dispatcher.add_handler(clean_handler)
 
 updater.start_polling()
 updater.idle()

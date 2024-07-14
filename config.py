@@ -17,3 +17,10 @@ ARIA2_SECRET = "secret"
 ARIA2_DOWNLOAD_PATH = "/mnt/sda1/aria2/pikpak"
 # 可以自定义TG API，也可以保持默认
 TG_API_URL = 'https://api.telegram.org'
+
+
+# alist config
+ALIST_BASEURL = ""
+ALIST_TOKEN = ""
+ALIST_COPY_FROM_PATH = "" #PIKPACK_PATH no /
+ALIST_COPY_TO_PATH = "" # no /

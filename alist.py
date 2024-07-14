@@ -2,6 +2,8 @@ import requests
 import logging
 import json
 from functools import lru_cache
+import time
+
 class AList:
     CopyPath = "/api/fs/copy"
     CopyQueryPath = "/api/admin/task/copy/info"
@@ -129,9 +131,23 @@ class AList:
                         if content["code"] != 200:
                             logging.error(f"Create directory {subpath} failed.Reason: {content}")
                             return AList.Error.MkdirUnknowFail
+                        # ensure the directory is created
+                        cnt = 0
+                        while True:
+                            self.fs_get.cache_parameters().pop(subpath)
+                            fileinfo = self.fs_get(subpath)
+                            if fileinfo is not None:
+                                break
+                            else:
+                                time.sleep(0.5)
+                                cnt += 1
+                                if cnt > 10:
+                                    logging.error(f"Create directory {subpath} timeout.")
+                                    return AList.Error.MkdirUnknowFail
                     else:
                         logging.error(f"Create directory {subpath} failed.Reason: {rp.text}")
                         return AList.Error.MkdirUnknowFail
+                    logging.debug(rp.text)
                 return None
         return AList.Error.MkdirUnknowFail
 

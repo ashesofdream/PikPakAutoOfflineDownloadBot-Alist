@@ -1,6 +1,9 @@
 # 功能
 
-自动PikPak离线下载+aria2下载+释放网盘空间的TG机器人
+自动PikPak离线下载+alist下载+释放网盘空间的TG机器人
+
+# 介绍
+本项目修改自[CJReinforce/PikPakAutoOfflineDownloadBot](https://github.com/CJReinforce/PikPakAutoOfflineDownloadBot),只是封装了alist下载而已
 
 # 用途
 
@@ -38,7 +41,7 @@ PASSWORD = ["example_password1", "example_password2"]
 # 自动删除配置，未配置默认开启自动删除，留空即可
 # AUTO_DELETE = {"example_user1": "True", "example_user2": "False"}
 AUTO_DELETE = {}
-# 以下分别为aria2 RPC的协议（http/https）、host、端口、密钥
+# 以下分别为aria2 RPC的协议（http/https）、host、端口、密钥 (大概是不需要了吧)
 ARIA2_HTTPS = False
 ARIA2_HOST = "example.aria2.host"
 ARIA2_PORT = "port"
@@ -47,6 +50,12 @@ ARIA2_SECRET = "secret"
 ARIA2_DOWNLOAD_PATH = "/mnt/sda1/aria2/pikpak"
 # 可以自定义TG API，也可以保持默认
 TG_API_URL = 'https://api.telegram.org'
+
+
+ALIST_BASEURL = "" # such as https://192.168.1.1:5244/alist/
+ALIST_TOKEN = ""
+ALIST_COPY_FROM_PATH = "" #PIKPACK在alist中挂载的路径+离线下载默认保存的路径(应该是/My pack),eg:/pikpack/My pack
+ALIST_COPY_TO_PATH = "" # 要复制到的alist路径
 ```
 
 最后：

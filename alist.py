@@ -63,10 +63,22 @@ class AList:
     class Error:
         MkdirIsFile = 1
         MkdirUnknowFail = 2
+    class EnableCache:
+        def __init__(self,alist):
+            self.alist = alist
+        def __enter__(self):
+            self.alist.enable_cache = True
+            self.alist.file_info_cache = {}
+            return self.alist
+        def __exit__(self,exc_type,exc_val,exc_tb):
+            self.alist.enable_cache = False
+            self.alist.file_info_cache = {}
 
     def __init__(self,base_url,token):
         self.base_url = base_url if not base_url.endswith("/") else base_url[:-1]
         self.token = token
+        self.enable_cache = False
+        self.file_info_cache = {}
     def copy(self,src_path:str,dst_path:str,filenames:list[str]) -> str|None:
         self.mkdirs(dst_path)
         url = self.base_url + self.CopyPath
@@ -87,8 +99,11 @@ class AList:
         logging.debug(rp.text)
         return None
     
-    @lru_cache(maxsize=128)
     def fs_get(self,path:str):
+        if self.enable_cache:
+            rst = self.file_info_cache.get(path)
+            if rst is not None:
+                return rst
         url = self.base_url + self.FsGetPath
         headers = {"Authorization":self.token}
         data = {"path":path,"password":""}
@@ -98,12 +113,18 @@ class AList:
             content = json.loads(rp.text)
             if content["code"] == 200:
                 data = content["data"]
-                if len(data) == 0:
-                    return None
-                return AList.FileInfo(
-                    **data
-                )
-            else:
+                rst = None
+                if len(data) != 0:
+                    rst = AList.FileInfo(**data)
+                if  self.enable_cache:
+                    self.file_info_cache[path] = rst
+                return rst
+            elif content["code"] == 500:
+                rst = None
+                if  self.enable_cache:
+                    self.file_info_cache[path] = rst
+                return rst
+            else: 
                 logging.error(f"Get file info of {path} failed.Reason: {content}")
         else:
             logging.error(f"Get file info of {path} failed.Reason: {rp.text}")
@@ -134,7 +155,8 @@ class AList:
                         # ensure the directory is created
                         cnt = 0
                         while True:
-                            self.fs_get.cache_parameters().pop(subpath)
+                            if self.enable_cache:
+                                self.file_info_cache.pop(subpath,None)
                             fileinfo = self.fs_get(subpath)
                             if fileinfo is not None:
                                 break

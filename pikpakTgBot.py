@@ -491,7 +491,6 @@ def main(update: Update, context: CallbackContext, magnet):
             else:  # 其他情况都换个号再试
                 continue
         # 清空fs_get缓存,防止路径错误
-        alist_manager.fs_get.cache_clear()
         # 如果找到了任务并且任务已完成，则开始从网盘下载到本地
         if mag_id and find and done:  # 判断mag_id是否为空防止所有号次数用尽的情况
             gid = {}  # 记录每个下载任务的gid，{gid:[文件名,file_id,下载直链]}
@@ -500,30 +499,30 @@ def main(update: Update, context: CallbackContext, magnet):
             # 获取到文件夹
             if down_url == "":
                 logging.info(f"磁链{mag_url_simple}内容为文件夹:{down_name}，准备提取出每个文件并下载")
+                with AList.EnableCache(alist_manager) as cache_manager:
+                    for name, url, down_file_id, path in get_folder_all_file(file_id, f"{down_name}/", each_account):
+                        tid = None # 成功推送aria2下载标志
+                        # 文件夹的推送下载是网络请求密集地之一，每个链接将尝试5次
+                        for tries in range(5):
+                            try:
+                                tid = cache_manager.copy(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path,ALIST_COPY_TO_PATH+"/"+path,[name])
+                                if tid is not None:
+                                    break
+                            except requests.exceptions.ReadTimeout:
+                                logging.warning(f'{name}第{tries + 1}(/5)次推送下载超时，将重试！')
+                                continue
+                            except json.JSONDecodeError:
+                                logging.warning(f'{name}第{tries + 1}(/5)次推送下载出错，可能是frp故障，将重试！')
+                                sleep(5)  # frp问题就休息一会
+                                continue
+                        if tid is None:  # 5次都推送下载失败，让用户手动下载该文件，并且要检查网络！
+                            print_info = f'{name}推送aria2下载失败！该文件直链如下，请手动下载：\n{url}'
+                            context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
+                            logging.error(print_info)
+                            continue  # 这个文件让用户手动下载，程序处理下一个文件
 
-                for name, url, down_file_id, path in get_folder_all_file(file_id, f"{down_name}/", each_account):
-                    tid = None # 成功推送aria2下载标志
-                    # 文件夹的推送下载是网络请求密集地之一，每个链接将尝试5次
-                    for tries in range(5):
-                        try:
-                            tid = alist_manager.copy(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path,ALIST_COPY_TO_PATH+"/"+path,[name])
-                            if tid is not None:
-                                break
-                        except requests.exceptions.ReadTimeout:
-                            logging.warning(f'{name}第{tries + 1}(/5)次推送下载超时，将重试！')
-                            continue
-                        except json.JSONDecodeError:
-                            logging.warning(f'{name}第{tries + 1}(/5)次推送下载出错，可能是frp故障，将重试！')
-                            sleep(5)  # frp问题就休息一会
-                            continue
-                    if tid is None:  # 5次都推送下载失败，让用户手动下载该文件，并且要检查网络！
-                        print_info = f'{name}推送aria2下载失败！该文件直链如下，请手动下载：\n{url}'
-                        context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
-                        logging.error(print_info)
-                        continue  # 这个文件让用户手动下载，程序处理下一个文件
-
-                    gid[tid] = [f'{name}', down_file_id, url,tid]
-                    logging.info(f'{path}{name}推送alist下载')
+                        gid[tid] = [f'{name}', down_file_id, url,tid]
+                        logging.info(f'{path}{name}推送alist下载')
 
                 # 文件夹所有文件都推送完后再发送信息，避免消息过多
                 context.bot.send_message(chat_id=update.effective_chat.id,

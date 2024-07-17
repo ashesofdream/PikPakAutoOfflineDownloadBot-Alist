@@ -63,6 +63,9 @@ class AList:
     class Error:
         MkdirIsFile = 1
         MkdirUnknowFail = 2
+    '''
+    temporary cache query fs info
+    '''
     class EnableCache:
         def __init__(self,alist):
             self.alist = alist
@@ -99,30 +102,31 @@ class AList:
         logging.debug(rp.text)
         return None
     
-    def fs_get(self,path:str):
+    '''
+    refresh: wheather to refresh alist's cache
+    this function will cache subpath's info of path if enable_cache is True
+    '''
+    def fs_get(self,path:str,refresh=False):
         if self.enable_cache:
             rst = self.file_info_cache.get(path)
             if rst is not None:
                 return rst
         url = self.base_url + self.FsGetPath
         headers = {"Authorization":self.token}
-        data = {"path":path,"password":""}
+        data = {"path":path,"password":"",refresh:refresh}
         rp = requests.post(url,headers=headers,data=data)
 
         if rp.status_code == 200:
             content = json.loads(rp.text)
             if content["code"] == 200:
                 data = content["data"]
-                rst = None
                 if len(data) != 0:
                     rst = AList.FileInfo(**data)
-                if  self.enable_cache:
-                    self.file_info_cache[path] = rst
+                    if  self.enable_cache:
+                        self.file_info_cache[path] = rst
                 return rst
             elif content["code"] == 500:
                 rst = None
-                if  self.enable_cache:
-                    self.file_info_cache[path] = rst
                 return rst
             else: 
                 logging.error(f"Get file info of {path} failed.Reason: {content}")
@@ -155,9 +159,7 @@ class AList:
                         # ensure the directory is created
                         cnt = 0
                         while True:
-                            if self.enable_cache:
-                                self.file_info_cache.pop(subpath,None)
-                            fileinfo = self.fs_get(subpath)
+                            fileinfo = self.fs_get(subpath,refresh=True)
                             if fileinfo is not None:
                                 break
                             else:

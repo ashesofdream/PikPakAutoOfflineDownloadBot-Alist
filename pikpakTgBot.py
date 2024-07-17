@@ -490,7 +490,21 @@ def main(update: Update, context: CallbackContext, magnet):
                 break
             else:  # 其他情况都换个号再试
                 continue
-        # 清空fs_get缓存,防止路径错误
+        # 等待alist数据刷新
+        wait_cnt = 10
+        while True:
+            query_result =  alist_manager.fs_get(ALIST_COPY_FROM_PATH+"/"+mag_name,refresh=True)
+            if query_result is not None:
+                break
+            if wait_cnt <= 0:
+                print_info = f'alist同步{mag_name}超时，请手动检查情况'
+                context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
+                logging.warning(print_info)
+                find = False
+                done = False
+                break
+            wait_cnt -= 1
+            sleep(5)
         # 如果找到了任务并且任务已完成，则开始从网盘下载到本地
         if mag_id and find and done:  # 判断mag_id是否为空防止所有号次数用尽的情况
             gid = {}  # 记录每个下载任务的gid，{gid:[文件名,file_id,下载直链]}

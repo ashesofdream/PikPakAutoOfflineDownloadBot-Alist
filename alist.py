@@ -9,6 +9,7 @@ class AList:
     CopyQueryPath = "/api/admin/task/copy/info"
     MkdirPath = "/api/fs/mkdir"
     FsGetPath = "/api/fs/get"
+    _FsListPath = "/api/fs/list"
 
     StatePending = 0  # Task is pending
     StateRunning = 1  # Task is running
@@ -173,10 +174,7 @@ class AList:
                         return AList.Error.MkdirUnknowFail
                     logging.debug(rp.text)
                 return None
-        return AList.Error.MkdirUnknowFail
-
-                                        
-                    
+        return AList.Error.MkdirUnknowFail                
 
     def query_copy_task(self,tid:str)->Task:
         url = self.base_url + self.CopyQueryPath
@@ -192,5 +190,75 @@ class AList:
         else:
             logging.error(f"Query task {tid} failed.Reason: {rp.text}")
         return []
+    
     def get_state_description(state:int)->str:
         return AList._STATE_DESCRIPTIONS.get(state,"unknown")
+    
+    def list_dir(self,path:str,refresh=False)->list[FileInfo]|None:
+        '''
+        请求参数
+        名称	位置	类型	必选	中文名	说明
+        Authorization	header	string	是		none
+        body	body	object	否		none
+        » path	body	string	是	路径	none
+        » password	body	string	是	密码	none
+        » page	body	integer	否		none
+        » per_page	body	integer	否		none
+        » refresh	body	boolean	否	强制 刷新	none
+        #返回示例
+        RP:
+        {
+            "code": 200,
+            "message": "success",
+            "data": {
+                "content": [
+                {
+                    "name": "Alist V3.md",
+                    "size": 1592,
+                    "is_dir": false,
+                    "modified": "2024-05-17T13:47:55.4174917+08:00",
+                    "created": "2024-05-17T13:47:47.5725906+08:00",
+                    "sign": "",
+                    "thumb": "",
+                    "type": 4,
+                    "hashinfo": "null",
+                    "hash_info": null
+                }
+                ],
+                "total": 1,
+                "readme": "",
+                "header": "",
+                "write": true,
+                "provider": "Local"
+            }
+            }
+        '''
+        headers = {"Authorization":self.token}
+        data = {"path":path,"refresh":refresh}
+        url = self.base_url + self.FsListPath
+        logging.debug(f"begin to refresh directory {path}")
+        rp = requests.post(url,headers=headers,json=data)
+        fileinfo_list = None
+        if rp.status_code == 200:
+            content = json.loads(rp.text)
+            if content["code"] == 200:
+                data = content["data"]
+                content = data["content"]
+                fileinfo_list = [AList.FileInfo(**f) for f in content]
+                return fileinfo_list
+            else:
+                logging.error(f"List directory {path} failed.Reason: {content}")
+        else:
+            logging.error(f"List directory {path} failed.Reason: {rp.text}")
+        return None
+
+    def ensure_file_exists(self,path:str,filename:str)->bool:
+        for refresh in [False,True]:
+            files = self.list_dir(path,refresh=refresh)
+            if files is not None:
+                for f in files:
+                    if f.name == filename:
+                        return True
+        return False
+
+        

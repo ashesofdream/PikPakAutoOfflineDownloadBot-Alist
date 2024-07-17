@@ -493,8 +493,7 @@ def main(update: Update, context: CallbackContext, magnet):
         # 等待alist数据刷新
         wait_cnt = 20
         while True:
-            query_result =  alist_manager.fs_get(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+mag_name,refresh=True)
-            if query_result is not None:
+            if alist_manager.ensure_file_exists(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH,mag_name):
                 break
             if wait_cnt <= 0:
                 print_info = f'alist同步{mag_name}超时，请手动检查情况'
@@ -520,10 +519,10 @@ def main(update: Update, context: CallbackContext, magnet):
                         for tries in range(5):
                             try:
                                 src_path = ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path
+                                path_pos = src_path.rfind("/")
                                 wait_cnt = 20
                                 while True:
-                                    fileinfo = cache_manager.fs_get(src_path,refresh=True)
-                                    if fileinfo is not None:
+                                    if alist_manager.ensure_file_exists(src_path[:path_pos],src_path[path_pos+1:]):
                                         break
                                     if wait_cnt <= 0:
                                         print_info = f'alist同步 src_path:{src_path} 超时，请手动检查情况'

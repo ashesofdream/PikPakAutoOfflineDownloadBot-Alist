@@ -491,7 +491,7 @@ def main(update: Update, context: CallbackContext, magnet):
             else:  # 其他情况都换个号再试
                 continue
         # 等待alist数据刷新
-        wait_cnt = 10
+        wait_cnt = 20
         while True:
             query_result =  alist_manager.fs_get(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+mag_name,refresh=True)
             if query_result is not None:
@@ -519,7 +519,20 @@ def main(update: Update, context: CallbackContext, magnet):
                         # 文件夹的推送下载是网络请求密集地之一，每个链接将尝试5次
                         for tries in range(5):
                             try:
-                                tid = cache_manager.copy(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path,ALIST_COPY_TO_PATH+"/"+path,[name])
+                                src_path = ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+path
+                                wait_cnt = 20
+                                while True:
+                                    fileinfo = cache_manager.fs_get(src_path,refresh=True)
+                                    if fileinfo is not None:
+                                        break
+                                    if wait_cnt <= 0:
+                                        print_info = f'alist同步 src_path:{src_path} 超时，请手动检查情况'
+                                        context.bot.send_message(chat_id=update.effective_chat.id, text=print_info)
+                                        logging.warning(print_info)
+                                        break
+                                    wait_cnt -= 1
+                                    sleep(5)
+                                tid = cache_manager.copy(src_path,ALIST_COPY_TO_PATH+"/"+path,[name])
                                 if tid is not None:
                                     break
                             except requests.exceptions.ReadTimeout:

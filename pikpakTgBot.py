@@ -493,7 +493,7 @@ def main(update: Update, context: CallbackContext, magnet):
         # 等待alist数据刷新
         wait_cnt = 10
         while True:
-            query_result =  alist_manager.fs_get(ALIST_COPY_FROM_PATH+"/"+mag_name,refresh=True)
+            query_result =  alist_manager.fs_get(ALIST_COPY_FROM_PATH+"/"+PIKPAK_DEFAULT_SAVE_PATH+"/"+mag_name,refresh=True)
             if query_result is not None:
                 break
             if wait_cnt <= 0:

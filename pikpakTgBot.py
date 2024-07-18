@@ -522,7 +522,7 @@ def main(update: Update, context: CallbackContext, magnet):
                                 path_pos = src_path.rfind("/")
                                 wait_cnt = 20
                                 while True:
-                                    if alist_manager.ensure_file_exists(src_path[:path_pos],src_path[path_pos+1:]):
+                                    if alist_manager.ensure_file_exists(src_path,name):
                                         break
                                     if wait_cnt <= 0:
                                         print_info = f'alist同步 src_path:{src_path} 超时，请手动检查情况'

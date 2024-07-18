@@ -1,7 +1,6 @@
 import requests
 import logging
 import json
-from functools import lru_cache
 import time
 
 class AList:
@@ -234,8 +233,8 @@ class AList:
             }
         '''
         headers = {"Authorization":self.token}
-        data = {"path":path,"refresh":refresh}
-        url = self.base_url + self.FsListPath
+        data = {"path":path,"refresh":refresh,"password":""}
+        url = self.base_url + self._FsListPath
         logging.debug(f"begin to refresh directory {path}")
         rp = requests.post(url,headers=headers,json=data)
         fileinfo_list = None

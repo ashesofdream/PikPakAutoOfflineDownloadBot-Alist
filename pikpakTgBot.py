@@ -12,9 +12,8 @@ from telegram import Update
 from telegram.ext import Updater, CallbackContext, CommandHandler, Handler, MessageHandler, Filters
 from alist import AList
 from config import *
-from pikpakapi import PikPakApi
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 # 全局变量
 SCHEMA = 'https' if ARIA2_HTTPS else 'http'

@@ -1,4 +1,5 @@
 import yaml
+import os
 # TG机器人的令牌，tg找@BotFather创建机器人即可获取
 TOKEN = 'token'
 # TG用户ID，限制发送消息的用户
@@ -32,10 +33,13 @@ ALIST_COPY_TO_PATH = "" # no /
 
 # 假设 YAML 文件保存为 config.yaml
 yaml_file = 'config.yaml'
+if not os.path.exists(yaml_file):
+    yaml_file = 'config_template.yaml'
 
 # 读取 YAML 文件
-with open(yaml_file, 'r') as f:
+with open(yaml_file, 'r', encoding='utf-8') as f:
     data = yaml.safe_load(f)
+print('data:', data)
 
 # 获取最外层的 PikPakAutoOfflineDownloadBot 配置
 bot_config = data.get('PikPakAutoOfflineDownloadBot', {})

@@ -243,6 +243,9 @@ class AList:
             if content["code"] == 200:
                 data = content["data"]
                 content = data["content"]
+                if content is None:
+                    logging.debug(f"list_dir_fail,refresh={refresh},packet={rp.text}")
+                    return None
                 fileinfo_list = [AList.FileInfo(**f) for f in content]
                 return fileinfo_list
             else:
